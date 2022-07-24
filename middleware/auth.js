@@ -5,7 +5,7 @@ const verifyToken = (req, res, next) => {
     const token = req.headers.authorization.replace('Bearer ', '')
     try {
         const decoded = jwt.verify(token, "secret")
-        User.findOne({phone: decoded.phone}, (err, user) => {
+        User.findOne({_id: decoded.userId}, (err, user) => {
             if (err) {
                 res.status(500).send(err)
             } else if (user) {

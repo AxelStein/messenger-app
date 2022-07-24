@@ -14,12 +14,16 @@ mongoose
     .catch(err => console.log(err))
 
 const AuthController = require('./controllers/AuthController.js')
-app.post('/login', AuthController.login)
-app.post('/register', AuthController.register)
+app.post('/auth/login', AuthController.login)
+app.post('/auth/register', AuthController.register)
+
+const ChatController = require('./controllers/ChatController.js')
+app.get('/chat', auth, ChatController.chats)
+app.post('/chat/create', auth, ChatController.create)
 
 const MessageController = require('./controllers/MessageController.js')
-app.post('/send_message', auth, MessageController.sendMessage)
-app.get('/messages', auth, MessageController.messages)
+app.get('/message', auth, MessageController.messages)
+app.post('/message/send', auth, MessageController.send)
 
 app.listen(port, () => {
     console.log(`Listen app on port ${port}`)

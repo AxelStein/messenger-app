@@ -10,6 +10,14 @@ function isEmpty(input) {
   return !input || !input.trim()
 }
 
+function generateToken(user) {
+    return jwt.sign({userId: user._id}, "secret")
+}
+
+function sendToken(user, res) {
+    res.send({token: generateToken(user)})
+}
+
 const AuthController = {
     login: (req, res) => {
         const phone = req.body.phone
@@ -26,7 +34,7 @@ const AuthController = {
                 res.status(500).send(err)
             } else if (user) {
                 if (user.password == encryptedPassword) {
-                    res.send({token: user.token})
+                    sendToken(user, res)
                 } else {
                     res.status(400).send({error: "Wrong password"})
                 }
@@ -55,9 +63,9 @@ const AuthController = {
                 User.create({
                     phone: phone,
                     password: encryptedPassword,
-                    token: token,
+                }, (err, user) => {
+                    sendToken(user, res)
                 })
-                res.status(201).send({token: token})
             }
         })
     },
