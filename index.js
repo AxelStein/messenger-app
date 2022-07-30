@@ -4,7 +4,8 @@ const port = 3030
 const bodyParser = require('body-parser')
 app.use(bodyParser.json())
 const mongoose = require('mongoose')
-const auth = require('./middleware/auth.js')
+const authVerification = require('./middleware/AuthVerification.js')
+require('dotenv').config()
 
 mongoose
     .connect('mongodb://localhost:27017/app')
@@ -13,17 +14,16 @@ mongoose
     })
     .catch(err => console.log(err))
 
-const AuthController = require('./controllers/AuthController.js')
-app.post('/auth/login', AuthController.login)
-app.post('/auth/register', AuthController.register)
+const authRouter = require('./routes/AuthRouter.js')
+app.use('/auth', authRouter)
 
 const ChatController = require('./controllers/ChatController.js')
-app.get('/chat', auth, ChatController.chats)
-app.post('/chat/create', auth, ChatController.create)
+app.get('/chat', authVerification, ChatController.chats)
+app.post('/chat/create', authVerification, ChatController.create)
 
 const MessageController = require('./controllers/MessageController.js')
-app.get('/message', auth, MessageController.messages)
-app.post('/message/send', auth, MessageController.send)
+app.get('/message', authVerification, MessageController.messages)
+app.post('/message/send', authVerification, MessageController.send)
 
 app.listen(port, () => {
     console.log(`Listen app on port ${port}`)

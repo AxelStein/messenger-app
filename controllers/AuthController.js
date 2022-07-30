@@ -1,74 +1,109 @@
 const User = require('../models/UserModel.js')
 const crypto = require('crypto')
 const jwt = require("jsonwebtoken")
+const PermissionGroup = require('../models/PermissionGroup.js')
 
 function encryptPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex')
 }
 
 function isEmpty(input) {
-  return !input || !input.trim()
+    return !input || !input.trim()
 }
 
-function generateToken(user) {
-    return jwt.sign({userId: user._id}, "secret")
+function generateAccessToken(user) {
+    return jwt.sign(
+        { userId: user._id },
+        process.env.TOKEN_KEY,
+        { expiresIn: "2h" }
+    )
 }
 
-function sendToken(user, res) {
-    res.send({token: generateToken(user)})
+function generateRefreshToken(user) {
+    return jwt.sign(
+        { 
+            userId: user._id,
+            isRefresh: true,
+        }, 
+        process.env.TOKEN_KEY
+    )
 }
 
-const AuthController = {
-    login: (req, res) => {
-        const phone = req.body.phone
-        const password = req.body.password
-        // todo validate phone number
-        if (isEmpty(phone) || isEmpty(password)) {
-            return res.status(400).send({error: "Credentials required"})
+function checkCredentials(email, password, res) {
+    if (isEmpty(email) || isEmpty(password)) {
+        res.status(400).send({ error: "Credentials required" })
+        return false
+    }
+    return true
+}
+
+exports.login = async function(req, res) {
+    const email = req.body.email
+    var password = req.body.password
+    // todo validate email
+    if (!checkCredentials(email, password, res)) {
+        return
+    }
+    password = encryptPassword(password)
+
+    const user = await User.findOne({ email })
+    if (user) {
+        if (user.password == password) {
+            res.send({ token: user.refreshToken })
+        } else {
+            res.status(400).send({ error: "Wrong password" })
         }
-
-        const encryptedPassword = encryptPassword(password)
-
-        User.findOne({ phone }, (err, user) => {
-            if (err) {
-                res.status(500).send(err)
-            } else if (user) {
-                if (user.password == encryptedPassword) {
-                    sendToken(user, res)
-                } else {
-                    res.status(400).send({error: "Wrong password"})
-                }
-            } else {
-                res.status(400).send({error: "User not exists"})
-            }
-        })
-    },
-
-    register: (req, res) => {
-        const phone = req.body.phone
-        const password = req.body.password
-        if (isEmpty(phone) || isEmpty(password)) {
-            return res.status(400).send({error: "Credentials required"})
-        }
-
-        const encryptedPassword = encryptPassword(password)
-        const token = jwt.sign({phone: phone}, "secret")
-
-        User.findOne({ phone }, (err, user) => {
-            if (err) {
-                res.status(500).send(err)
-            } else if (user) {
-                res.status(409).send({error: "User already exists"})
-            } else {
-                User.create({
-                    phone: phone,
-                    password: encryptedPassword,
-                }, (err, user) => {
-                    sendToken(user, res)
-                })
-            }
-        })
-    },
+    } else {
+        res.status(400).send({ error: "User not exists" })
+    }
 }
 
-module.exports = AuthController
+exports.register = async function(req, res) {
+    const email = req.body.email
+    var password = req.body.password
+    // todo validate email
+    if (!checkCredentials(email, password, res)) {
+        return
+    }
+    password = encryptPassword(password)
+
+    var user = await User.findOne({ email })
+    if (user) {
+        res.status(409).send({ error: "User already exists" })
+    } else {
+        user = await User.create({
+            email,
+            password,
+            permissionGroup: PermissionGroup.DEFAULT,
+        })
+
+        if (user) {
+            const refreshToken = generateRefreshToken(user)
+            await User.updateOne({ _id: user._id }, { refreshToken })
+            res.send({ token: refreshToken })
+        } else {
+            res.status(400).send({ error: "User creation error" })
+        }
+    }
+}
+
+exports.getAccessToken = async function(req, res) {
+    var decoded = undefined
+    try {
+        const token = req.headers.authorization.replace('Bearer ', '')
+        decoded = jwt.verify(token, process.env.TOKEN_KEY)
+    } catch (e) {
+        return res.status(400).send({ error: "Invalid token" })
+    }
+
+    if (!decoded.isRefresh) {
+        res.status(400).send({ error: "Use the appropriate refresh token" })
+    } else {
+        const user = await User.findOne({ _id: decoded.userId })
+        if (user) {
+            res.send({ token: generateAccessToken(user) })
+        } else {
+            res.status(400).send({ error: "User not found" })
+        }
+    }
+}
